@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let res: Value = res.json()?;
-    if res.get("results").is_none() {
+    if res.get("results").unwrap().as_array().unwrap().is_empty() {
         return Err("No results found".into());
     }
 

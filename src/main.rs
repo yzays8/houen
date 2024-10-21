@@ -1,5 +1,6 @@
 use std::env;
 use std::error::Error;
+use std::fmt;
 
 use arboard::Clipboard;
 use colored::Colorize;
@@ -7,6 +8,38 @@ use dialoguer::{theme::ColorfulTheme, Input, Select};
 use dotenv::dotenv;
 use reqwest::{blocking, StatusCode};
 use serde_json::Value;
+
+struct MovieData {
+    title: String,
+    release_date: String,
+    is_most_relevant: bool,
+}
+
+impl MovieData {
+    fn new(title: String, release_date: String, is_most_relevant: bool) -> Self {
+        Self {
+            title,
+            release_date,
+            is_most_relevant,
+        }
+    }
+}
+
+impl fmt::Display for MovieData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_most_relevant {
+            write!(
+                f,
+                "{} {} ({})",
+                String::from("[Most relevant title]").green(),
+                self.title,
+                self.release_date.blue()
+            )
+        } else {
+            write!(f, "{} ({})", self.title, self.release_date.blue())
+        }
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     dotenv()?;
@@ -34,16 +67,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         .as_array()
         .unwrap()
         .iter()
-        .map(|result| result["title"].as_str().unwrap().to_owned())
-        .collect::<Vec<String>>();
+        .map(|result| {
+            MovieData::new(
+                result["title"].as_str().unwrap().to_owned(),
+                match result["release_date"].as_str() {
+                    Some("") | None => "N/A".to_owned(),
+                    Some(date) => date.to_owned(),
+                },
+                false,
+            )
+        })
+        .collect::<Vec<MovieData>>();
 
-    let first_title = options[0].clone();
-    if let Some(title) = options.get_mut(0) {
-        *title = format!(
-            "{} {}",
-            String::from("[Most relevant title]").green(),
-            title
-        )
+    if let Some(data) = options.get_mut(0) {
+        data.is_most_relevant = true;
     } else {
         unreachable!();
     }
@@ -63,14 +100,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let selected_item = if selection.unwrap() == 0 {
-        first_title
-    } else {
-        options[selection.unwrap()].clone()
-    };
+    let selected_title = options[selection.unwrap()].title.clone();
     let mut clipboard = Clipboard::new()?;
-    clipboard.set_text(selected_item.as_str())?;
-    println!("Selected: {}", selected_item.blue());
+    clipboard.set_text(selected_title.as_str())?;
+    println!("Selected: {}", selected_title.green());
 
     Ok(())
 }

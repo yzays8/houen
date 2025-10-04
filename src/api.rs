@@ -1,37 +1,55 @@
-use anyhow::{anyhow, bail, Result};
-use reqwest::{blocking, StatusCode};
-use serde_json::Value;
+use reqwest::{Client, StatusCode};
+use serde::Deserialize;
 
-use crate::models::MovieData;
+use crate::{
+    error::{Error, Result},
+    models::MovieData,
+};
 
-pub fn fetch_data(query: &str, key: &str, token: &str) -> Result<Vec<MovieData>> {
+#[derive(Debug, Deserialize)]
+pub struct TmdbMovie {
+    pub title: String,
+    pub release_date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TmdbResponse {
+    pub results: Vec<TmdbMovie>,
+}
+
+pub async fn fetch_data(
+    client: &Client,
+    query: &str,
+    key: &str,
+    token: &str,
+) -> Result<Vec<MovieData>> {
     let url = format!(
         "https://api.themoviedb.org/3/search/movie?query={query}&include_adult=false&language=en-US&api_key={key}",
     );
-    let response = blocking::Client::new()
+    let res = client
         .get(url)
         .header("Authorization", format!("Bearer {}", token))
-        .send()?;
-    if response.status() != StatusCode::OK {
-        bail!("Failed to get response: {}", response.status());
+        .send()
+        .await?;
+    if res.status() != StatusCode::OK {
+        // bail!("Failed to get response: {}", res.status());
+        return Err(Error::Other(format!(
+            "Failed to get response: {}",
+            res.status()
+        )));
     }
-    let response: Value = response.json()?;
-
-    let results = response
-        .get("results")
-        .ok_or_else(|| anyhow!("Failed to get results"))?
-        .as_array()
-        .ok_or_else(|| anyhow!("Failed to get results"))?;
-    if results.is_empty() {
-        bail!("No results found");
+    let response: TmdbResponse = res.json().await?;
+    if response.results.is_empty() {
+        return Err(Error::ResultNotFound("No results found".into()));
     }
 
-    let mut movies = results
+    let mut movies = response
+        .results
         .iter()
         .map(|result| {
             MovieData::new(
-                result["title"].as_str().unwrap().to_owned(),
-                match result["release_date"].as_str() {
+                result.title.to_owned(),
+                match result.release_date.as_deref() {
                     Some("") | None => "N/A".to_owned(),
                     Some(date) => date.to_owned(),
                 },

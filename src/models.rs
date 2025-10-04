@@ -1,7 +1,6 @@
-use std::fmt;
-
 use colored::Colorize;
 
+#[derive(Debug)]
 pub struct MovieData {
     pub title: String,
     pub release_date: String,
@@ -18,8 +17,8 @@ impl MovieData {
     }
 }
 
-impl fmt::Display for MovieData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for MovieData {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self.is_most_relevant {
             write!(
                 f,

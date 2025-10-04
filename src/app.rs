@@ -1,83 +1,109 @@
-use std::env;
-use std::io::Write;
+use std::{env, fs, io::Write};
 
-use anyhow::Result;
 use arboard::Clipboard;
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, Input, Password, Select};
+use dialoguer::{Input, Password, Select, theme::ColorfulTheme};
 use dotenv::dotenv;
+use reqwest::Client;
 
-use crate::api::fetch_data;
-use crate::models::MovieData;
+use crate::{api::fetch_data, error::Result, models::MovieData};
 
-fn get_api_key() -> Result<String> {
-    if dotenv().is_ok() && env::var("API_KEY").is_ok() {
-        Ok(env::var("API_KEY").unwrap())
-    } else {
-        let k = Password::new()
-            .with_prompt("Enter your API key")
-            .interact()?;
-        write_api_key_to_env(&k)?;
-        Ok(k)
+const ENV_PATH: &str = ".env";
+
+#[derive(Debug)]
+struct Config {
+    api_key: String,
+    api_token: String,
+}
+
+impl Config {
+    pub fn load() -> Result<Self> {
+        if dotenv().is_err() {
+            println!("No .env file found, creating one...");
+            fs::File::create(ENV_PATH)?;
+        }
+
+        let api_key = match env::var("API_KEY") {
+            Ok(v) => v,
+            Err(_) => {
+                let v = Self::get_env_entry_with_prompt("Enter your API key")?;
+                Self::write_env_entry("API_KEY", &v)?;
+                v
+            }
+        };
+        let api_token = match env::var("API_TOKEN") {
+            Ok(v) => v,
+            Err(_) => {
+                let v = Self::get_env_entry_with_prompt("Enter your API token")?;
+                Self::write_env_entry("API_TOKEN", &v)?;
+                v
+            }
+        };
+
+        Ok(Self { api_key, api_token })
     }
-}
 
-fn get_api_token() -> Result<String> {
-    if dotenv().is_ok() && env::var("API_TOKEN").is_ok() {
-        Ok(env::var("API_TOKEN").unwrap())
-    } else {
-        let t = Password::new()
-            .with_prompt("Enter your API token")
-            .interact()?;
-        write_api_token_to_env(&t)?;
-        Ok(t)
+    fn get_env_entry_with_prompt(prompt: &str) -> Result<String> {
+        Password::new()
+            .with_prompt(prompt)
+            .interact()
+            .map_err(Into::into)
     }
-}
 
-fn write_api_key_to_env(key: &str) -> Result<()> {
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(".env")?;
-    writeln!(file, "API_KEY={}", key)?;
-    Ok(())
-}
+    fn write_env_entry(key: &str, value: &str) -> Result<()> {
+        if let Ok(env_file) = fs::read_to_string(ENV_PATH)
+            && env_file
+                .lines()
+                .any(|line| line.split('=').next() == Some(key))
+        {
+            return Ok(());
+        }
 
-fn write_api_token_to_env(token: &str) -> Result<()> {
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(".env")?;
-    writeln!(file, "API_TOKEN={}", token)?;
-    Ok(())
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(ENV_PATH)?;
+        writeln!(file, "{}={}", key, value)?;
+
+        Ok(())
+    }
 }
 
 fn get_query() -> Result<String> {
-    let query = Input::new().with_prompt("Enter a movie title").interact()?;
-    Ok(query)
+    Input::new()
+        .with_prompt("Enter a film title")
+        .interact()
+        .map_err(Into::into)
 }
 
 // Note: Depending on the size of the terminal window, the selection screen may collapse.
-fn select_title(movies: &[MovieData]) -> Result<Option<String>> {
+fn select_title(films: &[MovieData]) -> Result<Option<String>> {
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(format!(
-            "Found {} results. Select a movie title to copy to clipboard.",
-            movies.len()
+            "Found {} results. Select a film title to copy to clipboard.",
+            films.len()
         ))
         .report(false)
-        .items(movies)
+        .items(films)
         .default(0)
         .interact_opt()?;
 
     if let Some(index) = selection {
-        Ok(Some(movies[index].title.clone()))
+        Ok(Some(films[index].title.clone()))
     } else {
         Ok(None)
     }
 }
 
-pub fn run() -> Result<()> {
-    let movies = fetch_data(&get_query()?, &get_api_key()?, &get_api_token()?)?;
+pub async fn run() -> Result<()> {
+    let config = Config::load()?;
+    let movies = fetch_data(
+        &Client::new(),
+        &get_query()?,
+        &config.api_key,
+        &config.api_token,
+    )
+    .await?;
 
     if let Some(t) = select_title(&movies)? {
         let mut clipboard = Clipboard::new()?;

@@ -77,19 +77,19 @@ fn get_query() -> Result<String> {
 }
 
 // Note: Depending on the size of the terminal window, the selection screen may collapse.
-fn select_title(films: &[MovieData]) -> Result<Option<String>> {
+fn select_title(movies: &[MovieData]) -> Result<Option<String>> {
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(format!(
             "Found {} results. Select a film title to copy to clipboard.",
-            films.len()
+            movies.len()
         ))
         .report(false)
-        .items(films)
+        .items(movies)
         .default(0)
         .interact_opt()?;
 
     if let Some(index) = selection {
-        Ok(Some(films[index].title.clone()))
+        Ok(Some(movies[index].title.clone()))
     } else {
         Ok(None)
     }

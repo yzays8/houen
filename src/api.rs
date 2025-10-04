@@ -1,4 +1,4 @@
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde::Deserialize;
 
 use crate::{
@@ -31,26 +31,20 @@ pub async fn fetch_data(
         ("language", "en-US"),
         ("api_key", key),
     ];
-    let res = client
+    let res: TmdbResponse = client
         .get(TMDB_API_URL)
         .header("Authorization", format!("Bearer {}", token))
         .query(&params)
         .send()
+        .await?
+        .json()
         .await?;
-    if res.status() != StatusCode::OK {
-        // bail!("Failed to get response: {}", res.status());
-        return Err(Error::Other(format!(
-            "Failed to get response: {}",
-            res.status()
-        )));
-    }
-    let response: TmdbResponse = res.json().await?;
-    if response.results.is_empty() {
+    let movies = res.results;
+    if movies.is_empty() {
         return Err(Error::ResultNotFound("No results found".into()));
     }
 
-    let mut movies = response
-        .results
+    let mut movies = movies
         .iter()
         .map(|result| {
             MovieData::new(

@@ -6,6 +6,8 @@ use crate::{
     models::MovieData,
 };
 
+const TMDB_API_URL: &str = "https://api.themoviedb.org/3/search/movie";
+
 #[derive(Debug, Deserialize)]
 pub struct TmdbMovie {
     pub title: String,
@@ -23,12 +25,16 @@ pub async fn fetch_data(
     key: &str,
     token: &str,
 ) -> Result<Vec<MovieData>> {
-    let url = format!(
-        "https://api.themoviedb.org/3/search/movie?query={query}&include_adult=false&language=en-US&api_key={key}",
-    );
+    let params = [
+        ("query", query),
+        ("include_adult", "false"),
+        ("language", "en-US"),
+        ("api_key", key),
+    ];
     let res = client
-        .get(url)
+        .get(TMDB_API_URL)
         .header("Authorization", format!("Bearer {}", token))
+        .query(&params)
         .send()
         .await?;
     if res.status() != StatusCode::OK {

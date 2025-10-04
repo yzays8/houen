@@ -1,9 +1,9 @@
 #![deny(unsafe_code)]
 
-use anyhow::{Ok, Result};
+use anyhow::Ok;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     match houen::run().await {
         Err(houen::Error::ResultNotFound(msg)) => {
             println!("{}", msg);
